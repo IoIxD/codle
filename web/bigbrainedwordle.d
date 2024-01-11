@@ -1,0 +1,1 @@
+/home/gavin/Projects/bigbrainedwordle/target/wasm32-unknown-emscripten/release/bigbrainedwordle.js: /home/gavin/Projects/bigbrainedwordle/src/Ubuntu-Regular.ttf /home/gavin/Projects/bigbrainedwordle/src/dictionary.json /home/gavin/Projects/bigbrainedwordle/src/main.rs

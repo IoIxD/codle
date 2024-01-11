@@ -1,0 +1,31 @@
+[package]
+name = "bigbrainedwordle"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+getrandom = { version = "0.2.12", features = ["js"] }
+lazy_static = "1.4.0"
+rand = "0.8.5"
+serde = "1.0.195"
+serde_json = "1.0.111"
+wasm-bindgen = "0.2.89"
+
+[dependencies.raylib]
+version = "5.1.0"
+git = "https://github.com/IoIxD/raylib-rs"
+rev = "233713c6e98f9fe27ecac0a891f0bbd0a07e9311"
+
+[dependencies.raylib-sys]
+version = "5.1.0"
+git = "https://github.com/IoIxD/raylib-rs"
+rev = "233713c6e98f9fe27ecac0a891f0bbd0a07e9311"
+
+[build-dependencies]
+bindgen = "0.69.1"
+cc = "1.0.83"
+
+[profile.release]
+debug = true
