@@ -241,7 +241,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         } else {
             let mu = {
                 if rl.is_key_down(KeyboardKey::KEY_TAB) {
-                    -50.0
+                    50.0
                 } else {
                     10.0
                 }
@@ -484,16 +484,21 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             d_.clear_background(Color::WHITE);
             let on = (((offset * 87) / -783) - 1) * -1;
 
-            for word in 0..100 {
-                for guess in 0..MAX_GUESSES {
-                    for letter in 0..=4 {
-                        if let Some(_) = guessed.get(guess) {
+            for mul in 0..100 {
+                for word in 0..100 {
+                    for guess in 0..MAX_GUESSES {
+                        for letter in 0..=4 {
                             let pos: Vector3 =
                                 Vector3::new(letter as f32, word as f32, guess as f32);
 
-                            let x = (50 + (pos.x - (pos.y / 2.0)) as i32) * 4;
-                            let y = (19 + (pos.y + pos.z) as i32) * 4;
-                            d_.draw_rectangle(x, y, 4, 4, Color::BLACK);
+                            let x = (1 + (pos.x + (pos.y / 2.0)) as i32) * 4;
+                            let y = (118 - (pos.y + pos.z) as i32) * 4;
+                            if let Some(_) = guessed.get(guess) {
+                                d_.draw_rectangle(x, y, 4, 4, Color::BLACK);
+                            }
+                            if on == word && mul == dimension {
+                                d_.draw_rectangle(x - 4, y, 12, 4, Color::RED);
+                            }
                         }
                     }
                 }
@@ -503,10 +508,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             let max_score: f64 = 150.23450982345 * 10000.0;
             for mul in 0..100 {
                 for word in 0..100 {
-                    if (on == word && mul > dimension) || (on == word && mul < dimension) {
-                        continue;
-                    }
-                    let highlight = on == word && mul == dimension;
                     for guess in 0..=MAX_GUESSES {
                         for letter in 0..=4 {
                             let pos = Vector3::new(letter as f32, word as f32, guess as f32);
@@ -518,49 +519,25 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 
                                     let col = if g == w {
                                         score += 150.23450982345;
-                                        if highlight {
-                                            Color::DARKGREEN
-                                        } else {
-                                            Color::GREEN
-                                        }
+                                        Color::GREEN
                                     } else {
                                         if w.contains(ch) {
                                             if let Some(word_char) = w.chars().nth(letter) {
                                                 if word_char == ch {
-                                                    if highlight {
-                                                        Color::DARKGREEN
-                                                    } else {
-                                                        Color::GREEN
-                                                    }
+                                                    Color::GREEN
                                                 } else {
-                                                    if highlight {
-                                                        Color::DARKORANGE
-                                                    } else {
-                                                        Color::ORANGE
-                                                    }
+                                                    Color::ORANGE
                                                 }
-                                            } else {
-                                                if highlight {
-                                                    Color::BLACK
-                                                } else {
-                                                    Color::GRAY
-                                                }
-                                            }
-                                        } else {
-                                            if highlight {
-                                                Color::BLACK
                                             } else {
                                                 Color::GRAY
                                             }
+                                        } else {
+                                            Color::GRAY
                                         }
                                     };
-                                    let x = (50 + (pos.x - (pos.y / 2.0)) as i32) * 4;
-                                    let y = (19 + (pos.y + pos.z) as i32) * 4;
-                                    if highlight {
-                                        d_.draw_rectangle(x, y, 4, 4, col);
-                                    } else {
-                                        d_.draw_rectangle(x, y, 4, 4, col.fade(0.2));
-                                    }
+                                    let x = (1 + (pos.x + (pos.y / 2.0)) as i32) * 4;
+                                    let y = (118 - (pos.y + pos.z) as i32) * 4;
+                                    d_.draw_rectangle(x, y, 4, 4, col.fade(0.2));
                                 }
                             }
                         }
