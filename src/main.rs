@@ -1,4 +1,10 @@
-use std::{collections::HashMap, ffi::CString, ptr::null_mut, time::UNIX_EPOCH, vec};
+use std::{
+    collections::HashMap,
+    ffi::CString,
+    ptr::null_mut,
+    time::{SystemTime, UNIX_EPOCH},
+    vec,
+};
 
 use rand::{rngs::StdRng, Rng, SeedableRng};
 use serde_json::Value;
@@ -81,11 +87,19 @@ extern "C" {
     fn GetWindowInnerHeight() -> i32;
 }
 
+#[derive(PartialEq)]
+enum Screen {
+    Title,
+    Game,
+    Won,
+}
+
 const GRAY: Color = Color::new(63, 63, 70, 255);
+const BLUE: Color = Color::new(31, 41, 55, 255);
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     raylib::set_trace_log(TraceLogLevel::LOG_ERROR);
     let mut buffer = Vec::new();
-    let mut guessed = Vec::new();
+    let mut guessed: Vec<String> = Vec::new();
     let mut words = HashMap::new();
     let (mut rl, thread) = raylib::init().size(720, 1024).title("Infinle").build();
 
@@ -209,18 +223,22 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // regular cubes
     let mesh = unsafe { Mesh::gen_mesh_cube(&thread, 15.0, 15.0, 15.0).make_weak() };
     let cube = rl.load_model_from_mesh(&thread, mesh).unwrap();
-    let mut solved: HashMap<i64, usize> = HashMap::new();
-
+    let mut show_letters = true;
     let word = get_word(1 as i64, &mut words);
-    println!("{}", word);
     let word_chars = word.chars();
+
+    let mut screen = Screen::Title;
+    let mut win_time = SystemTime::now();
 
     while !rl.window_should_close() {
         #[cfg(feature = "wasm")]
-        let width = unsafe { GetWindowInnerWidth() } / 2;
+        let width = unsafe { GetWindowInnerWidth() };
         #[cfg(feature = "wasm")]
-        let height = unsafe { GetWindowInnerHeight() } - 16;
+        let height = unsafe { GetWindowInnerHeight() };
         rl.set_window_size(width, height);
+
+        let screen_width = rl.get_screen_width();
+        let screen_height = rl.get_screen_height();
 
         let valid = DICTIONARY.contains(&Value::String(
             buffer
@@ -231,254 +249,406 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 .to_string()
                 .to_lowercase(),
         ));
+        let f_width = rl.get_screen_width() as f32 / 10.0;
+        match screen {
+            Screen::Title => {
+                let mut d = rl.begin_drawing(&thread);
+                d.clear_background(BLUE);
 
-        if rl.is_key_released(KeyboardKey::KEY_ENTER) {
-            if buffer.len() == 5 && valid {
-                let mut g = String::new();
-                for key in &buffer {
-                    g += get_letter(key);
-                }
-                guessed.push(g.to_uppercase());
-                buffer.truncate(0);
-            }
-        }
-        if rl.is_key_released(KeyboardKey::KEY_BACKSPACE) {
-            buffer.pop();
-        }
-
-        if let Some(k) = rl.get_key_pressed() {
-            if buffer.len() < 5 {
-                match k {
-                    KeyboardKey::KEY_A
-                    | KeyboardKey::KEY_B
-                    | KeyboardKey::KEY_C
-                    | KeyboardKey::KEY_D
-                    | KeyboardKey::KEY_E
-                    | KeyboardKey::KEY_F
-                    | KeyboardKey::KEY_G
-                    | KeyboardKey::KEY_H
-                    | KeyboardKey::KEY_I
-                    | KeyboardKey::KEY_J
-                    | KeyboardKey::KEY_K
-                    | KeyboardKey::KEY_L
-                    | KeyboardKey::KEY_M
-                    | KeyboardKey::KEY_N
-                    | KeyboardKey::KEY_O
-                    | KeyboardKey::KEY_P
-                    | KeyboardKey::KEY_Q
-                    | KeyboardKey::KEY_R
-                    | KeyboardKey::KEY_S
-                    | KeyboardKey::KEY_T
-                    | KeyboardKey::KEY_U
-                    | KeyboardKey::KEY_V
-                    | KeyboardKey::KEY_W
-                    | KeyboardKey::KEY_X
-                    | KeyboardKey::KEY_Y
-                    | KeyboardKey::KEY_Z => {
-                        buffer.push(k);
-                    }
-                    _ => {}
-                };
-            }
-        }
-        let mut d_ = rl.begin_drawing(&thread);
-        let mut offset = (camera.position.z as i64) / 10;
-        d_.clear_background(Color::new(31, 41, 55, 255));
-
-        {
-            let mut d = d_.begin_mode3D(camera);
-
-            if offset >= 100 {
-                offset = 100;
-            }
-            let mut solved_num = 0;
-
-            for guess in 0..=MAX_GUESSES {
-                let mut yellow_letters_marked: HashMap<char, usize> = HashMap::new();
-                for letter in 0..=4 {
-                    let pos = Vector3::new(
-                        16.0 - (letter as f32 * 16.0),
-                        16.0 - (guess as f32 * 16.0),
-                        (7.0) - (offset as f32),
-                    );
-
-                    if let Some(g) = guessed.get(guess) {
-                        let g = g.clone();
-                        if let Some(ch) = g.chars().nth(letter) {
-                            let arr = if g == word {
-                                solved_num += 1;
-                                &green_letters
-                            } else {
-                                if word.contains(ch) {
-                                    if let Some(word_char) = word_chars.clone().nth(letter) {
-                                        if word_char == ch {
-                                            solved_num += 1;
-                                            &green_letters
-                                        } else {
-                                            solved_num = 0;
-                                            if !yellow_letters_marked.contains_key(&ch) {
-                                                yellow_letters_marked.insert(ch, 1);
-                                                &yellow_letters
-                                            } else {
-                                                let am = yellow_letters_marked.get(&ch).unwrap();
-
-                                                let what =
-                                                    word.matches(ch).collect::<Vec<&str>>().len();
-                                                if am < &what {
-                                                    &yellow_letters
-                                                } else {
-                                                    &letters
-                                                }
-                                            }
-                                        }
-                                    } else {
-                                        solved_num = 0;
-                                        &letters
-                                    }
-                                } else {
-                                    solved_num = 0;
-                                    &letters
-                                }
-                            };
-                            if let Some(lette) = arr.get(ch as usize - 65) {
-                                d.draw_model(&lette.1, pos, 1.0, Color::WHITE);
-                            }
-                        }
-                    } else {
-                        if guess == guessed.len() {
-                            if let Some(t) = &buffer.get(letter) {
-                                if let Some(ch) = get_letter(&t).chars().nth(0) {
-                                    let letters = if valid || buffer.len() < 5 {
-                                        &letters
-                                    } else {
-                                        &red_letters
-                                    };
-                                    if ch as usize >= 65 {
-                                        if let Some(lette) = letters.get(ch as usize - 65) {
-                                            d.draw_model(&lette.1, pos, 1.0, Color::WHITE);
-                                            solved_num = 0;
-                                        }
-                                    }
-                                }
-                            } else {
-                                d.draw_model(&cube, pos, 1.0, Color::new(24, 24, 27, 255))
-                            }
-                        } else {
-                            d.draw_model(&cube, pos, 1.0, Color::new(24, 24, 27, 255))
-                        }
-                    }
-                }
-                if solved_num >= 5 {
-                    if !solved.contains_key(&(1)) {
-                        solved.insert(1, guess);
-                    }
-                } else {
-                    solved_num = 0;
-                }
-            }
-            if guessed.len() >= (MAX_GUESSES + 1) {
-                let mut n = 0;
-                let get_word = &get_word(1 as i64, &mut words);
-
-                for letter in get_word.split("") {
-                    if let Some(ch) = letter.chars().nth(0) {
-                        if let Some(lette) = letters.get(ch as usize - 65) {
-                            d.draw_model(
-                                &lette.1,
-                                Vector3::new(
-                                    16.0 - (n as f32 * 16.0) + 16.0,
-                                    16.0 - (6.0 * 16.0),
-                                    (7.0) - (offset as f32),
-                                ),
-                                1.0,
-                                Color::WHITE,
-                            );
-                        }
-                    }
-                    n += 1;
-                }
-            }
-        }
-
-        let key_width = width / 10;
-        let key_height = height / 12;
-        let font_size = key_height as f32 * 0.75;
-        let mut y = height - (key_height * 3);
-        let vec = &guessed.clone();
-        let l = vec
-            .iter()
-            .map(|f| f.split("").into_iter().collect::<Vec<&str>>())
-            .flat_map(|f| f)
-            .collect::<Vec<&str>>();
-
-        for row in &keys {
-            let boost = 10 - row.len();
-            let mut x = 4 + ((key_width / 2) * (boost) as i32);
-            let x_ = x;
-
-            for key in row {
-                let color = {
-                    if l.contains(key) {
-                        if word.contains(key) {
-                            Color::new(128, 128, 128, 255)
-                        } else {
-                            Color::BLACK
-                        }
-                    } else {
-                        Color::new(74, 74, 74, 255)
-                    }
-                };
-                d_.draw_rectangle(x, y, key_width - 12, key_height - 12, color);
-
-                let m = measure_text_ex(&font, key, font_size, 3.0);
-                d_.draw_text_ex(
+                let text = "CODLE";
+                let w = measure_text_ex(&font, &text, f_width, 3.0);
+                d.draw_text_ex(
                     &font,
-                    key,
-                    Vector2::new(
-                        x as f32 + (key_width as f32 / 2.0) - (m.x / 2.0) - 6.0,
-                        y as f32,
-                    ),
-                    font_size,
+                    text,
+                    Vector2::new((d.get_screen_width() as f32 / 2.0) - (w.x / 2.0), 32.0),
+                    f_width,
                     3.0,
                     Color::WHITE,
                 );
 
-                let mx = d_.get_touch_x();
-                let my = d_.get_touch_y();
+                let f_width = f_width * 0.5;
 
-                if d_.is_gesture_detected(Gesture::GESTURE_TAP) {
-                    if mx >= x && mx <= x + key_width {
-                        if my >= y && my <= y + key_height {
-                            let k = get_key(&key);
-                            if k != KeyboardKey::KEY_NULL {
-                                buffer.push(k);
-                            } else {
-                                // BACKSPACE
-                                if x == x_ as i32 {
-                                    if buffer.len() == 5 && valid {
-                                        let mut g = String::new();
-                                        for key in &buffer {
-                                            g += get_letter(key);
+                let text = "Get 6 chances to guess a 5 letter";
+
+                let w = measure_text_ex(&font, &text, f_width, 3.0);
+                d.draw_text_ex(
+                    &font,
+                    text,
+                    Vector2::new(
+                        (d.get_screen_width() as f32 / 2.0) - (w.x / 2.0),
+                        (d.get_screen_height() / 4) as f32,
+                    ),
+                    f_width,
+                    3.0,
+                    Color::WHITE,
+                );
+                let text = "word that's related to programming.";
+                let w = measure_text_ex(&font, &text, f_width, 3.0);
+                d.draw_text_ex(
+                    &font,
+                    text,
+                    Vector2::new(
+                        (d.get_screen_width() as f32 / 2.0) - (w.x / 2.0),
+                        (d.get_screen_height() / 4) as f32 + (f_width + 4.0),
+                    ),
+                    f_width,
+                    3.0,
+                    Color::WHITE,
+                );
+                let text = "Click anywhere to begin";
+                let w = measure_text_ex(&font, &text, f_width, 3.0);
+                d.draw_text_ex(
+                    &font,
+                    text,
+                    Vector2::new(
+                        (d.get_screen_width() as f32 / 2.0) - (w.x / 2.0),
+                        (d.get_screen_height() - (d.get_screen_height() / 4)) as f32,
+                    ),
+                    f_width,
+                    3.0,
+                    Color::WHITE,
+                );
+
+                if d.is_gesture_detected(Gesture::GESTURE_TAP) {
+                    screen = Screen::Game;
+                }
+            }
+            Screen::Won | Screen::Game => {
+                if let Some(k) = rl.get_key_pressed() {
+                    if screen == Screen::Game {
+                        push_valid_word(&mut buffer, k);
+                    }
+                }
+                let mut d_ = rl.begin_drawing(&thread);
+                let mut offset = (camera.position.z as i64) / 10;
+                d_.clear_background(BLUE);
+
+                {
+                    let mut d = d_.begin_mode3D(camera);
+
+                    if offset >= 100 {
+                        offset = 100;
+                    }
+                    let mut solved_num = 0;
+
+                    for guess in 0..=MAX_GUESSES {
+                        let mut yellow_letters_marked: HashMap<char, usize> = HashMap::new();
+                        for letter in 0..=4 {
+                            let pos = Vector3::new(
+                                16.0 - (letter as f32 * 16.0),
+                                16.0 - (guess as f32 * 16.0),
+                                (7.0) - (offset as f32),
+                            );
+
+                            if let Some(g) = guessed.get(guess) {
+                                let g = g.clone();
+                                if let Some(ch) = g.chars().nth(letter) {
+                                    let arr = if g == word {
+                                        solved_num += 1;
+                                        &green_letters
+                                    } else {
+                                        if word.contains(ch) {
+                                            if let Some(word_char) = word_chars.clone().nth(letter)
+                                            {
+                                                if word_char == ch {
+                                                    solved_num += 1;
+                                                    &green_letters
+                                                } else {
+                                                    solved_num = 0;
+                                                    if !yellow_letters_marked.contains_key(&ch) {
+                                                        yellow_letters_marked.insert(ch, 1);
+                                                        &yellow_letters
+                                                    } else {
+                                                        let am =
+                                                            yellow_letters_marked.get(&ch).unwrap();
+
+                                                        let what = word
+                                                            .matches(ch)
+                                                            .collect::<Vec<&str>>()
+                                                            .len();
+                                                        if am < &what {
+                                                            &yellow_letters
+                                                        } else {
+                                                            &letters
+                                                        }
+                                                    }
+                                                }
+                                            } else {
+                                                solved_num = 0;
+                                                &letters
+                                            }
+                                        } else {
+                                            solved_num = 0;
+                                            &letters
                                         }
-                                        guessed.push(g.to_uppercase());
-                                        buffer.truncate(0);
+                                    };
+
+                                    if let Some(lette) = arr.get(ch as usize - 65) {
+                                        let l = match show_letters {
+                                            true => &lette.1,
+                                            false => &lette.0,
+                                        };
+                                        d.draw_model(l, pos, 1.0, Color::WHITE);
                                     }
                                 }
-                                if x == x_ + (key_width * 8) {
-                                    buffer.pop();
+                            } else {
+                                if guess == guessed.len() {
+                                    if let Some(t) = &buffer.get(letter) {
+                                        if let Some(ch) = get_letter(&t).chars().nth(0) {
+                                            let letters = if valid || buffer.len() < 5 {
+                                                &letters
+                                            } else {
+                                                &red_letters
+                                            };
+                                            if ch as usize >= 65 {
+                                                if let Some(lette) = letters.get(ch as usize - 65) {
+                                                    let l = match show_letters {
+                                                        true => &lette.1,
+                                                        false => &lette.0,
+                                                    };
+                                                    d.draw_model(l, pos, 1.0, Color::WHITE);
+                                                    solved_num = 0;
+                                                }
+                                            }
+                                        }
+                                    } else {
+                                        d.draw_model(&cube, pos, 1.0, Color::new(24, 24, 27, 255))
+                                    }
+                                } else {
+                                    d.draw_model(&cube, pos, 1.0, Color::new(24, 24, 27, 255))
                                 }
                             }
+                        }
+                        if solved_num >= 5 {
+                            if screen != Screen::Won {
+                                screen = Screen::Won;
+                                win_time = SystemTime::now();
+                            }
+                        } else {
+                            solved_num = 0;
+                        }
+                    }
+                    if guessed.len() >= (MAX_GUESSES + 1) {
+                        let mut n = 0;
+                        let get_word = &get_word(1 as i64, &mut words);
+
+                        for letter in get_word.split("") {
+                            if let Some(ch) = letter.chars().nth(0) {
+                                if let Some(lette) = letters.get(ch as usize - 65) {
+                                    d.draw_model(
+                                        &lette.1,
+                                        Vector3::new(
+                                            16.0 - (n as f32 * 16.0) + 16.0,
+                                            16.0 - (6.0 * 16.0),
+                                            (7.0) - (offset as f32),
+                                        ),
+                                        1.0,
+                                        Color::WHITE,
+                                    );
+                                }
+                            }
+                            n += 1;
                         }
                     }
                 }
 
-                x += key_width;
+                match screen {
+                    Screen::Game => {
+                        if d_.is_key_released(KeyboardKey::KEY_ENTER) {
+                            if buffer.len() == 5 && valid {
+                                let mut g = String::new();
+                                for key in &buffer {
+                                    g += get_letter(key);
+                                }
+                                guessed.push(g.to_uppercase());
+                                buffer.truncate(0);
+                            }
+                        }
+                        if d_.is_key_released(KeyboardKey::KEY_BACKSPACE) {
+                            buffer.pop();
+                        }
+
+                        let key_width = width / 10;
+                        let key_height = height / 12;
+                        let font_size = key_height as f32 * 0.75;
+                        let mut y = height - (key_height * 3);
+                        let vec = &guessed.clone();
+                        let l = vec
+                            .iter()
+                            .map(|f| f.split("").into_iter().collect::<Vec<&str>>())
+                            .flat_map(|f| f)
+                            .collect::<Vec<&str>>();
+
+                        for row in &keys {
+                            let boost = 10 - row.len();
+                            let mut x = 4 + ((key_width / 2) * (boost) as i32);
+                            let x_ = x;
+
+                            for key in row {
+                                let color = {
+                                    if l.contains(key) {
+                                        if word.contains(key) {
+                                            Color::new(128, 128, 128, 255)
+                                        } else {
+                                            Color::BLACK
+                                        }
+                                    } else {
+                                        Color::new(74, 74, 74, 255)
+                                    }
+                                };
+                                d_.draw_rectangle(x, y, key_width - 12, key_height - 12, color);
+
+                                let m = measure_text_ex(&font, key, font_size, 3.0);
+                                d_.draw_text_ex(
+                                    &font,
+                                    key,
+                                    Vector2::new(
+                                        x as f32 + (key_width as f32 / 2.0) - (m.x / 2.0) - 6.0,
+                                        y as f32,
+                                    ),
+                                    font_size,
+                                    3.0,
+                                    Color::WHITE,
+                                );
+
+                                let mx = d_.get_touch_x();
+                                let my = d_.get_touch_y();
+
+                                if d_.is_gesture_detected(Gesture::GESTURE_TAP) {
+                                    if mx >= x && mx <= x + key_width {
+                                        if my >= y && my <= y + key_height {
+                                            let k = get_key(&key);
+                                            if k != KeyboardKey::KEY_NULL {
+                                                buffer.push(k);
+                                            } else {
+                                                // BACKSPACE
+                                                if x == x_ as i32 {
+                                                    if buffer.len() == 5 && valid {
+                                                        let mut g = String::new();
+                                                        for key in &buffer {
+                                                            g += get_letter(key);
+                                                        }
+                                                        guessed.push(g.to_uppercase());
+                                                        buffer.truncate(0);
+                                                    }
+                                                }
+                                                if x == x_ + (key_width * 8) {
+                                                    buffer.pop();
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+
+                                x += key_width;
+                            }
+                            y += key_height;
+                        }
+                    }
+                    _ => {
+                        show_letters = false;
+                        if win_time.elapsed()?.as_secs() >= 1 {
+                            let alpha = {
+                                if win_time.elapsed()?.as_secs() <= 1 {
+                                    win_time.elapsed()?.as_secs_f32() - 1.0
+                                } else {
+                                    1.0
+                                }
+                            };
+                            d_.draw_rectangle(
+                                screen_width / 4,
+                                0,
+                                screen_width / 2,
+                                screen_height,
+                                Color::BLACK.fade(alpha * 0.50),
+                            );
+                            let f_width = f_width * 0.50;
+                            draw_text_centered(
+                                &mut d_,
+                                &font,
+                                f_width,
+                                format!("Codle {}/6", guessed.len()).as_str(),
+                                screen_width,
+                                (screen_height / 4) as f32,
+                                alpha,
+                            );
+
+                            draw_text_centered(
+                                &mut d_,
+                                &font,
+                                f_width,
+                                "ioi-xd.net/codle",
+                                screen_width,
+                                (screen_height / 4) as f32 + (f_width * 2.0),
+                                alpha,
+                            )
+                        }
+                    }
+                }
             }
-            y += key_height;
         }
     }
 
     Ok(())
+}
+
+pub fn draw_text_centered<A>(
+    rl: &mut A,
+    font: &Font,
+    font_size: f32,
+    text: &str,
+    width: i32,
+    y: f32,
+    alpha: f32,
+) where
+    A: RaylibDraw,
+{
+    let w = measure_text_ex(&font, &text, font_size, 3.0);
+
+    rl.draw_text_ex(
+        &font,
+        text,
+        Vector2::new((width / 2) as f32 - (w.x / 2.0), y),
+        font_size,
+        3.0,
+        Color::WHITE.fade(alpha),
+    );
+}
+
+pub fn push_valid_word(buffer: &mut Vec<KeyboardKey>, k: KeyboardKey) {
+    if buffer.len() < 5 {
+        match k {
+            KeyboardKey::KEY_A
+            | KeyboardKey::KEY_B
+            | KeyboardKey::KEY_C
+            | KeyboardKey::KEY_D
+            | KeyboardKey::KEY_E
+            | KeyboardKey::KEY_F
+            | KeyboardKey::KEY_G
+            | KeyboardKey::KEY_H
+            | KeyboardKey::KEY_I
+            | KeyboardKey::KEY_J
+            | KeyboardKey::KEY_K
+            | KeyboardKey::KEY_L
+            | KeyboardKey::KEY_M
+            | KeyboardKey::KEY_N
+            | KeyboardKey::KEY_O
+            | KeyboardKey::KEY_P
+            | KeyboardKey::KEY_Q
+            | KeyboardKey::KEY_R
+            | KeyboardKey::KEY_S
+            | KeyboardKey::KEY_T
+            | KeyboardKey::KEY_U
+            | KeyboardKey::KEY_V
+            | KeyboardKey::KEY_W
+            | KeyboardKey::KEY_X
+            | KeyboardKey::KEY_Y
+            | KeyboardKey::KEY_Z => {
+                buffer.push(k);
+            }
+            _ => {}
+        };
+    }
 }
 
 pub fn get_letter(key: &KeyboardKey) -> &str {
