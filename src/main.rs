@@ -7,6 +7,32 @@ const MAX_GUESSES: usize = 5;
 
 use raylib::prelude::*;
 
+/* used:
+    - Javascript reserved keywords
+    - HTML tags
+    - CSS properties
+    - Python keywords
+    - SQL keywords
+    - Bash keywords
+    - Java keywords
+    - C# keywords
+    - C/C++ keywords
+    - PHP keywords
+    - Powershell keywords
+    - Golang keywords
+    - Rust keywords
+    - Kotlin keywords
+    - Ruby keywords
+    - Lua keywords
+    - Dart keywords
+    - Swift keywords
+    - the words "Swift", "Scala", "Julia", "OCaml", "Apex".
+
+    hard mode mixes in:
+    - x86 mnemonics
+    - ARM64 mnemonics
+    - PPC mnemonics
+*/
 lazy_static::lazy_static! {
     pub static ref DICTIONARY: Vec<Value> =
         serde_json::from_str(include_str!("./dictionary.json")).unwrap();
@@ -48,19 +74,26 @@ fn load_font(_thread: &RaylibThread, fontfile: &[u8]) -> Font {
     }
 }
 
+#[cfg(feature = "wasm")]
+
+extern "C" {
+    fn GetWindowInnerWidth() -> i32;
+    fn GetWindowInnerHeight() -> i32;
+}
+
 const GRAY: Color = Color::new(63, 63, 70, 255);
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     raylib::set_trace_log(TraceLogLevel::LOG_ERROR);
     let mut buffer = Vec::new();
     let mut guessed = Vec::new();
     let mut words = HashMap::new();
-    let (mut rl, thread) = raylib::init().size(640, 480).title("Infinle").build();
+    let (mut rl, thread) = raylib::init().size(720, 1024).title("Infinle").build();
 
     let font = load_font(&thread, include_bytes!("./Ubuntu-Regular.ttf"));
 
     let camera = Camera3D::perspective(
-        Vector3::new(-15.0, -30.0, -100.0),
-        Vector3::new(-15.0, -30.0, 0.0),
+        Vector3::new(-15.0, -40.0, -100.0),
+        Vector3::new(-15.0, -40.0, 0.0),
         Vector3::new(0.0, 1.0, 0.0),
         60.0,
     );
@@ -101,6 +134,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
         unsafe { v.set_len(26) }
     }
+
+    let keys = vec![
+        vec!["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
+        vec!["A", "S", "D", "F", "G", "H", "J", "K", "L"],
+        vec!["^", "Z", "X", "C", "V", "B", "N", "M", "<"],
+    ];
     {
         let mut d_ = rl.begin_drawing(&thread);
         let mut i = 0;
@@ -162,11 +201,27 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         j += 1;
     }
 
+    #[cfg(not(feature = "wasm"))]
+    let width = get_monitor_width(get_current_monitor_index()) / 2;
+    #[cfg(not(feature = "wasm"))]
+    let height = get_monitor_height(get_current_monitor_index()) - 256;
+
     // regular cubes
     let mesh = unsafe { Mesh::gen_mesh_cube(&thread, 15.0, 15.0, 15.0).make_weak() };
     let cube = rl.load_model_from_mesh(&thread, mesh).unwrap();
     let mut solved: HashMap<i64, usize> = HashMap::new();
+
+    let word = get_word(1 as i64, &mut words);
+    println!("{}", word);
+    let word_chars = word.chars();
+
     while !rl.window_should_close() {
+        #[cfg(feature = "wasm")]
+        let width = unsafe { GetWindowInnerWidth() } / 2;
+        #[cfg(feature = "wasm")]
+        let height = unsafe { GetWindowInnerHeight() } - 16;
+        rl.set_window_size(width, height);
+
         let valid = DICTIONARY.contains(&Value::String(
             buffer
                 .iter()
@@ -250,14 +305,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     if let Some(g) = guessed.get(guess) {
                         let g = g.clone();
                         if let Some(ch) = g.chars().nth(letter) {
-                            let w = get_word(1 as i64, &mut words);
-
-                            let arr = if g == w {
+                            let arr = if g == word {
                                 solved_num += 1;
                                 &green_letters
                             } else {
-                                if w.contains(ch) {
-                                    if let Some(word_char) = w.chars().nth(letter) {
+                                if word.contains(ch) {
+                                    if let Some(word_char) = word_chars.clone().nth(letter) {
                                         if word_char == ch {
                                             solved_num += 1;
                                             &green_letters
@@ -270,7 +323,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                                 let am = yellow_letters_marked.get(&ch).unwrap();
 
                                                 let what =
-                                                    w.matches(ch).collect::<Vec<&str>>().len();
+                                                    word.matches(ch).collect::<Vec<&str>>().len();
                                                 if am < &what {
                                                     &yellow_letters
                                                 } else {
@@ -300,9 +353,11 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                                     } else {
                                         &red_letters
                                     };
-                                    if let Some(lette) = letters.get(ch as usize - 65) {
-                                        d.draw_model(&lette.1, pos, 1.0, Color::WHITE);
-                                        solved_num = 0;
+                                    if ch as usize >= 65 {
+                                        if let Some(lette) = letters.get(ch as usize - 65) {
+                                            d.draw_model(&lette.1, pos, 1.0, Color::WHITE);
+                                            solved_num = 0;
+                                        }
                                     }
                                 }
                             } else {
@@ -324,7 +379,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             if guessed.len() >= (MAX_GUESSES + 1) {
                 let mut n = 0;
                 let get_word = &get_word(1 as i64, &mut words);
-                println!("{}", get_word);
 
                 for letter in get_word.split("") {
                     if let Some(ch) = letter.chars().nth(0) {
@@ -344,6 +398,83 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                     n += 1;
                 }
             }
+        }
+
+        let key_width = width / 10;
+        let key_height = height / 12;
+        let font_size = key_height as f32 * 0.75;
+        let mut y = height - (key_height * 3);
+        let vec = &guessed.clone();
+        let l = vec
+            .iter()
+            .map(|f| f.split("").into_iter().collect::<Vec<&str>>())
+            .flat_map(|f| f)
+            .collect::<Vec<&str>>();
+
+        for row in &keys {
+            let boost = 10 - row.len();
+            let mut x = 4 + ((key_width / 2) * (boost) as i32);
+            let x_ = x;
+
+            for key in row {
+                let color = {
+                    if l.contains(key) {
+                        if word.contains(key) {
+                            Color::new(128, 128, 128, 255)
+                        } else {
+                            Color::BLACK
+                        }
+                    } else {
+                        Color::new(74, 74, 74, 255)
+                    }
+                };
+                d_.draw_rectangle(x, y, key_width - 12, key_height - 12, color);
+
+                let m = measure_text_ex(&font, key, font_size, 3.0);
+                d_.draw_text_ex(
+                    &font,
+                    key,
+                    Vector2::new(
+                        x as f32 + (key_width as f32 / 2.0) - (m.x / 2.0) - 6.0,
+                        y as f32,
+                    ),
+                    font_size,
+                    3.0,
+                    Color::WHITE,
+                );
+
+                let mx = d_.get_touch_x();
+                let my = d_.get_touch_y();
+
+                if d_.is_gesture_detected(Gesture::GESTURE_TAP) {
+                    if mx >= x && mx <= x + key_width {
+                        if my >= y && my <= y + key_height {
+                            let k = get_key(&key);
+                            if k != KeyboardKey::KEY_NULL {
+                                buffer.push(k);
+                            } else {
+                                // BACKSPACE
+                                if x == x_ as i32 {
+                                    if buffer.len() == 5 && valid {
+                                        let mut g = String::new();
+                                        for key in &buffer {
+                                            g += get_letter(key);
+                                        }
+                                        guessed.push(g.to_uppercase());
+                                        buffer.truncate(0);
+                                    }
+                                }
+                                if x == x_ + (key_width * 8) {
+                                    buffer.pop();
+                                }
+                            }
+                        }
+                    }
+                }
+
+                x += key_width;
+            }
+            y += key_height;
         }
     }
 
@@ -381,5 +512,38 @@ pub fn get_letter(key: &KeyboardKey) -> &str {
 
         KeyboardKey::KEY_SPACE => " ",
         _ => "?",
+    }
+}
+
+pub fn get_key(key: &str) -> KeyboardKey {
+    match key {
+        "A" => KeyboardKey::KEY_A,
+        "B" => KeyboardKey::KEY_B,
+        "C" => KeyboardKey::KEY_C,
+        "D" => KeyboardKey::KEY_D,
+        "E" => KeyboardKey::KEY_E,
+        "F" => KeyboardKey::KEY_F,
+        "G" => KeyboardKey::KEY_G,
+        "H" => KeyboardKey::KEY_H,
+        "I" => KeyboardKey::KEY_I,
+        "J" => KeyboardKey::KEY_J,
+        "K" => KeyboardKey::KEY_K,
+        "L" => KeyboardKey::KEY_L,
+        "M" => KeyboardKey::KEY_M,
+        "N" => KeyboardKey::KEY_N,
+        "O" => KeyboardKey::KEY_O,
+        "P" => KeyboardKey::KEY_P,
+        "Q" => KeyboardKey::KEY_Q,
+        "R" => KeyboardKey::KEY_R,
+        "S" => KeyboardKey::KEY_S,
+        "T" => KeyboardKey::KEY_T,
+        "U" => KeyboardKey::KEY_U,
+        "V" => KeyboardKey::KEY_V,
+        "W" => KeyboardKey::KEY_W,
+        "X" => KeyboardKey::KEY_X,
+        "Y" => KeyboardKey::KEY_Y,
+        "Z" => KeyboardKey::KEY_Z,
+
+        _ => KeyboardKey::KEY_NULL,
     }
 }
