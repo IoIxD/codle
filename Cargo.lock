@@ -33,23 +33,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 
 [[package]]
-name = "bigbrainedwordle"
-version = "0.1.0"
-dependencies = [
- "bindgen 0.69.1",
- "cc",
- "getrandom",
- "lazy_static",
- "rand",
- "raylib",
- "raylib-sys",
- "serde",
- "serde_json",
- "wasm-bindgen",
- "wasm-cookies",
-]
-
-[[package]]
 name = "bindgen"
 version = "0.63.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -168,6 +151,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a31c789563b815f77f4250caee12365734369f942439b7defd71e18a48197130"
 dependencies = [
  "cc",
+]
+
+[[package]]
+name = "codle"
+version = "0.1.0"
+dependencies = [
+ "bindgen 0.69.1",
+ "cc",
+ "getrandom",
+ "lazy_static",
+ "rand",
+ "raylib",
+ "raylib-sys",
+ "serde",
+ "serde_json",
+ "wasm-bindgen",
+ "wasm-cookies",
 ]
 
 [[package]]
